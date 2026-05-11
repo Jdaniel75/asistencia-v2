@@ -10,15 +10,21 @@
         :root { --primary: #2563eb; --bg: #f8fafc; }
         body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); display: flex; justify-content: center; padding: 20px; }
         .card { background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
-        select, textarea { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 16px; }
+        select, textarea { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 16px; box-sizing: border-box; }
         .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
-        button { padding: 15px; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; transition: 0.3s; }
+        button { padding: 15px; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; transition: 0.3s; font-size: 1rem; }
         .btn-in { background: #22c55e; color: white; }
         .btn-out { background: #ef4444; color: white; }
         #qrcode { margin-top: 20px; display: flex; justify-content: center; }
         .status { margin-top: 15px; padding: 10px; border-radius: 8px; font-size: 14px; }
         .info { background: #dbeafe; color: #1e40af; }
         .error { background: #fee2e2; color: #991b1b; }
+        
+        /* Estilos del Temporizador */
+        #timerContainer { display: none; margin-top: 20px; }
+        .timer-text { font-weight: bold; font-size: 1.1rem; color: #334155; margin-bottom: 5px; }
+        .progress-bg { width: 100%; background-color: #e2e8f0; border-radius: 10px; height: 12px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 100%; background-color: #3b82f6; transition: width 1s linear, background-color 0.5s; }
     </style>
 </head>
 <body>
@@ -39,15 +45,29 @@
 
         <div id="status" class="status info" style="display:none;"></div>
         <div id="qrcode"></div>
+
+        <div id="timerContainer">
+            <div class="timer-text" id="timerText">El código expira en 60s</div>
+            <div class="progress-bg">
+                <div class="progress-fill" id="progressBar"></div>
+            </div>
+        </div>
     </div>
 
     <script>
-        const API_BASE = 'https://script.google.com/macros/s/AKfycbwSt4a6EfjN6P89pNem4MdnVf1MprlBAJ7enmTe7uSQeE68u8TXwj9hp4qwbEUEcNolwQ/exec'; // 🔗 PEGA TU URL AQUÍ
+        // 🔗 PEGA TU URL DE GOOGLE APPS SCRIPT AQUÍ:
+        const API_BASE = 'https://script.google.com/macros/s/AKfycbwSt4a6EfjN6P89pNem4MdnVf1MprlBAJ7enmTe7uSQeE68u8TXwj9hp4qwbEUEcNolwQ/exec'; 
+        
         const emailSelect = document.getElementById('emailSelect');
         const statusDiv = document.getElementById('status');
         const qrDiv = document.getElementById('qrcode');
         const obsContainer = document.getElementById('obsContainer');
+        const timerContainer = document.getElementById('timerContainer');
+        const timerText = document.getElementById('timerText');
+        const progressBar = document.getElementById('progressBar');
+        
         let deviceFingerprint = '';
+        let timerInterval;
 
         async function init() {
             const fp = await FingerprintJS.load();
@@ -68,10 +88,10 @@
             statusDiv.className = 'status error';
             statusDiv.innerText = msg;
             statusDiv.style.display = 'block';
+            detenerTemporizador();
         }
 
         function prepararAccion(tipo) {
-            // Mostrar cuadro de notas solo en salida
             obsContainer.style.display = (tipo === 'salida') ? 'block' : 'none';
             generarQR(tipo);
         }
@@ -80,7 +100,9 @@
             const email = emailSelect.value;
             if (!email) return mostrarError('Por favor selecciona tu nombre.');
             
+            // Limpiar pantalla
             qrDiv.innerHTML = '';
+            detenerTemporizador();
             statusDiv.className = 'status info';
             statusDiv.innerText = 'Obteniendo GPS y generando token...';
             statusDiv.style.display = 'block';
@@ -93,11 +115,49 @@
                     const res = await fetch(url);
                     const data = await res.json();
                     if (data.status === 'success') {
+                        statusDiv.style.display = 'none'; // Ocultar mensaje de "Obteniendo..."
                         new QRCode(qrDiv, { text: data.token, width: 200, height: 200 });
-                        statusDiv.innerText = `QR de ${tipo.toUpperCase()} listo. Válido por 60s.`;
-                    } else { mostrarError(data.message); }
+                        iniciarTemporizador(); // Arrancar la cuenta regresiva visual
+                    } else { 
+                        mostrarError(data.message); 
+                    }
                 } catch(e) { mostrarError('Error de red.'); }
             }, () => mostrarError('Debes activar el GPS para marcar.'));
+        }
+
+        function iniciarTemporizador() {
+            let tiempoRestante = 60;
+            timerContainer.style.display = 'block';
+            progressBar.style.width = '100%';
+            progressBar.style.backgroundColor = '#3b82f6'; // Azul inicial
+            timerText.innerText = `El código expira en ${tiempoRestante}s`;
+
+            timerInterval = setInterval(() => {
+                tiempoRestante--;
+                const porcentaje = (tiempoRestante / 60) * 100;
+                progressBar.style.width = `${porcentaje}%`;
+                timerText.innerText = `El código expira en ${tiempoRestante}s`;
+
+                // Cambiar color de la barra según el tiempo
+                if (tiempoRestante <= 15) {
+                    progressBar.style.backgroundColor = '#ef4444'; // Rojo pánico
+                } else if (tiempoRestante <= 30) {
+                    progressBar.style.backgroundColor = '#f59e0b'; // Naranja advertencia
+                }
+
+                // Cuando llega a cero
+                if (tiempoRestante <= 0) {
+                    detenerTemporizador();
+                    qrDiv.innerHTML = ''; // Borramos el QR de la pantalla
+                    document.getElementById('observacion').value = ''; // Limpiar nota
+                    mostrarError('El código expiró. Por favor, genera uno nuevo.');
+                }
+            }, 1000);
+        }
+
+        function detenerTemporizador() {
+            clearInterval(timerInterval);
+            timerContainer.style.display = 'none';
         }
 
         init();
