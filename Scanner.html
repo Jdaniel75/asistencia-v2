@@ -12,7 +12,6 @@
         #mensaje { margin-top: 20px; font-size: 1.2rem; padding: 15px; border-radius: 10px; display: none;}
         .exito { background: #10b981; } .error { background: #ef4444; }
     </style>
-    <!-- Librería profesional para escanear QR -->
     <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
@@ -30,7 +29,7 @@
     <div id="mensaje"></div>
 
 <script>
-    const API_BASE = 'https://script.google.com/macros/s/AKfycbwSt4a6EfjN6P89pNem4MdnVf1MprlBAJ7enmTe7uSQeE68u8TXwj9hp4qwbEUEcNolwQ/exec'; // <-- Pon tu URL aquí también
+    const API_BASE = 'https://script.google.com/macros/s/AKfycbwSt4a6EfjN6P89pNem4MdnVf1MprlBAJ7enmTe7uSQeE68u8TXwj9hp4qwbEUEcNolwQ/exec'; 
     const html5QrcodeScanner = new Html5Qrcode("reader");
     let escaneando = false;
 
@@ -57,11 +56,9 @@
         msg.style.display = 'block'; msg.className = ''; msg.innerHTML = 'Validando con el servidor... ⏳';
 
         try {
-            // El QR tiene formato: token|email|tipo
-            const partes = decodedText.split('|');
-            if (partes.length !== 3) throw new Error("QR no válido para este sistema.");
-
-            const url = `${API_BASE}?action=registrar&token=${partes[0]}&email=${encodeURIComponent(partes[1])}&tipo=${partes[2]}&pin=${pin}`;
+            // NUEVA LÓGICA: El QR ahora es el token directo, sin "partes" divididas.
+            // Se envía directamente a validarYRegistrar en Google Apps Script
+            const url = `${API_BASE}?action=registrar&token=${encodeURIComponent(decodedText)}&pin=${pin}`;
             const res = await fetch(url).then(r => r.json());
 
             if (res.status === 'success') {
