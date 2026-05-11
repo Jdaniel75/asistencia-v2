@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escáner Oficial - Portería</title>
+    <style>
+        body{background:#1e293b; color:white; font-family:sans-serif; text-align:center; padding:20px;}
+        #reader { width: 100%; max-width: 500px; margin: 0 auto; background: black; border-radius: 10px; overflow: hidden; border: 4px solid #334155;}
+        input { padding: 15px; font-size: 1.2rem; text-align: center; border-radius: 10px; border: none; margin-bottom: 20px; letter-spacing: 5px; }
+        button { background: #3b82f6; color: white; padding: 15px 30px; font-size: 1.2rem; border: none; border-radius: 10px; cursor: pointer; }
+        #mensaje { margin-top: 20px; font-size: 1.2rem; padding: 15px; border-radius: 10px; display: none;}
+        .exito { background: #10b981; } .error { background: #ef4444; }
+    </style>
+    <!-- Librería profesional para escanear QR -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+
+    <h1>📸 Escáner de Asistencia</h1>
+    
+    <div id="loginPanel">
+        <p>Introduce el PIN del escáner:</p>
+        <input type="password" id="pinInput" placeholder="****" maxlength="4">
+        <br>
+        <button onclick="iniciarEscaner()">Activar Cámara</button>
+    </div>
+
+    <div id="reader" style="display:none;"></div>
+    <div id="mensaje"></div>
+
+<script>
+    const API_BASE = 'https://script.google.com/macros/s/AKfycbyKQQe9Zx_8KUOvu7jg9tggbaTCtSVNx-79qyqmrNcr7SMsl6xy8DgSEFMUAdcWQfdX/exec'; // <-- Pon tu URL aquí también
+    const html5QrcodeScanner = new Html5Qrcode("reader");
+    let escaneando = false;
+
+    function iniciarEscaner() {
+        const pin = document.getElementById('pinInput').value;
+        if (!pin) return alert("Introduce el PIN.");
+        
+        document.getElementById('loginPanel').style.display = 'none';
+        document.getElementById('reader').style.display = 'block';
+
+        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        // Usar la cámara trasera del dispositivo
+        html5QrcodeScanner.start({ facingMode: "environment" }, config, (decodedText) => onScanSuccess(decodedText, pin))
+        .catch(err => alert("Error al abrir cámara: Asegúrate de dar permisos."));
+    }
+
+    async function onScanSuccess(decodedText, pin) {
+        if (escaneando) return; // Evitar escanear el mismo QR 20 veces por segundo
+        escaneando = true;
+        
+        // Pausar escáner visualmente
+        document.getElementById('reader').style.borderColor = "#f59e0b"; // Naranja cargando
+        const msg = document.getElementById('mensaje');
+        msg.style.display = 'block'; msg.className = ''; msg.innerHTML = 'Validando con el servidor... ⏳';
+
+        try {
+            // El QR tiene formato: token|email|tipo
+            const partes = decodedText.split('|');
+            if (partes.length !== 3) throw new Error("QR no válido para este sistema.");
+
+            const url = `${API_BASE}?action=registrar&token=${partes[0]}&email=${encodeURIComponent(partes[1])}&tipo=${partes[2]}&pin=${pin}`;
+            const res = await fetch(url).then(r => r.json());
+
+            if (res.status === 'success') {
+                msg.className = 'exito'; msg.innerHTML = res.mensaje;
+                document.getElementById('reader').style.borderColor = "#10b981"; // Verde exito
+                reproducirBeep(); // Un sonido para que el portero sepa que pasó
+            } else {
+                throw new Error(res.message);
+            }
+        } catch (err) {
+            msg.className = 'error'; msg.innerHTML = "❌ " + err.message;
+            document.getElementById('reader').style.borderColor = "#ef4444"; // Rojo error
+        }
+
+        // Reactivar el escáner después de 3 segundos para la siguiente persona
+        setTimeout(() => { 
+            escaneando = false; 
+            msg.style.display = 'none';
+            document.getElementById('reader').style.borderColor = "#334155"; 
+        }, 3000);
+    }
+
+    function reproducirBeep() {
+        const audio = new Audio('https://www.soundjay.com/buttons/sounds/beep-07a.mp3');
+        audio.play().catch(e=>{});
+    }
+</script>
+</body>
+</html>
