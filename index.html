@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Asistencia</title>
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root { --primary: #2563eb; --bg: #f8fafc; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); display: flex; justify-content: center; padding: 20px; }
+        .card { background: white; padding: 2rem; border-radius: 20px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        select, textarea { width: 100%; padding: 12px; margin: 10px 0; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 16px; }
+        .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        button { padding: 15px; border: none; border-radius: 12px; cursor: pointer; font-weight: 600; transition: 0.3s; }
+        .btn-in { background: #22c55e; color: white; }
+        .btn-out { background: #ef4444; color: white; }
+        #qrcode { margin-top: 20px; display: flex; justify-content: center; }
+        .status { margin-top: 15px; padding: 10px; border-radius: 8px; font-size: 14px; }
+        .info { background: #dbeafe; color: #1e40af; }
+        .error { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Registro de Asistencia</h2>
+        <p>Selecciona tu nombre para generar el QR</p>
+        
+        <select id="emailSelect"><option>Cargando docentes...</option></select>
+        
+        <div id="obsContainer" style="display:none;">
+            <textarea id="observacion" rows="2" placeholder="Nota/Observación de salida (Opcional)"></textarea>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn-in" onclick="prepararAccion('entrada')">ENTRADA</button>
+            <button class="btn-out" onclick="prepararAccion('salida')">SALIDA</button>
+        </div>
+
+        <div id="status" class="status info" style="display:none;"></div>
+        <div id="qrcode"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://script.google.com/macros/s/AKfycbxPvDv0wStMvVgQHAZleJ7IsGs2YlWX_jYVjbqpc-7xPeKRKBGWtvh7fAmHwVFT1gCLJA/exec'; // 🔗 PEGA TU URL AQUÍ
+        const emailSelect = document.getElementById('emailSelect');
+        const statusDiv = document.getElementById('status');
+        const qrDiv = document.getElementById('qrcode');
+        const obsContainer = document.getElementById('obsContainer');
+        let deviceFingerprint = '';
+
+        async function init() {
+            const fp = await FingerprintJS.load();
+            const result = await fp.get();
+            deviceFingerprint = result.visitorId;
+
+            try {
+                const res = await fetch(`${API_BASE}?action=getDocentes`);
+                const data = await res.json();
+                emailSelect.innerHTML = '<option value="">-- Selecciona tu nombre --</option>';
+                data.docentes.forEach(d => {
+                    emailSelect.innerHTML += `<option value="${d.email}">${d.nombre}</option>`;
+                });
+            } catch(e) { mostrarError('Error al conectar con el servidor.'); }
+        }
+
+        function mostrarError(msg) {
+            statusDiv.className = 'status error';
+            statusDiv.innerText = msg;
+            statusDiv.style.display = 'block';
+        }
+
+        function prepararAccion(tipo) {
+            // Mostrar cuadro de notas solo en salida
+            obsContainer.style.display = (tipo === 'salida') ? 'block' : 'none';
+            generarQR(tipo);
+        }
+
+        async function generarQR(tipo) {
+            const email = emailSelect.value;
+            if (!email) return mostrarError('Por favor selecciona tu nombre.');
+            
+            qrDiv.innerHTML = '';
+            statusDiv.className = 'status info';
+            statusDiv.innerText = 'Obteniendo GPS y generando token...';
+            statusDiv.style.display = 'block';
+
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const obs = encodeURIComponent(document.getElementById('observacion').value);
+                const url = `${API_BASE}?action=generarToken&email=${email}&tipo=${tipo}&fingerprint=${deviceFingerprint}&observacion=${obs}`;
+                
+                try {
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    if (data.status === 'success') {
+                        new QRCode(qrDiv, { text: data.token, width: 200, height: 200 });
+                        statusDiv.innerText = `QR de ${tipo.toUpperCase()} listo. Válido por 60s.`;
+                    } else { mostrarError(data.message); }
+                } catch(e) { mostrarError('Error de red.'); }
+            }, () => mostrarError('Debes activar el GPS para marcar.'));
+        }
+
+        init();
+    </script>
+</body>
+</html>
