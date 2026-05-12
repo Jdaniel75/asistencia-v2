@@ -97,33 +97,36 @@
         }
 
         async function generarQR(tipo) {
-            const email = emailSelect.value;
-            if (!email) return mostrarError('Por favor selecciona tu nombre.');
-            
-            // Limpiar pantalla
-            qrDiv.innerHTML = '';
-            detenerTemporizador();
-            statusDiv.className = 'status info';
-            statusDiv.innerText = 'Obteniendo GPS y generando token...';
-            statusDiv.style.display = 'block';
+    const email = emailSelect.value;
+    if (!email) return mostrarError('Por favor selecciona tu nombre.');
+    
+    qrDiv.innerHTML = '';
+    detenerTemporizador();
+    statusDiv.className = 'status info';
+    statusDiv.innerText = 'Validando ubicación... 📍';
+    statusDiv.style.display = 'block';
 
-            navigator.geolocation.getCurrentPosition(async (pos) => {
-                const obs = encodeURIComponent(document.getElementById('observacion').value);
-                const url = `${API_BASE}?action=generarToken&email=${email}&tipo=${tipo}&fingerprint=${deviceFingerprint}&observacion=${obs}`;
-                
-                try {
-                    const res = await fetch(url);
-                    const data = await res.json();
-                    if (data.status === 'success') {
-                        statusDiv.style.display = 'none'; // Ocultar mensaje de "Obteniendo..."
-                        new QRCode(qrDiv, { text: data.token, width: 200, height: 200 });
-                        iniciarTemporizador(); // Arrancar la cuenta regresiva visual
-                    } else { 
-                        mostrarError(data.message); 
-                    }
-                } catch(e) { mostrarError('Error de red.'); }
-            }, () => mostrarError('Debes activar el GPS para marcar.'));
-        }
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const obs = encodeURIComponent(document.getElementById('observacion').value);
+        
+        // Enviamos latitud y longitud al servidor para validación real
+        const url = `${API_BASE}?action=generarToken&email=${email}&tipo=${tipo}&fingerprint=${deviceFingerprint}&observacion=${obs}&lat=${lat}&lng=${lng}`;
+        
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            if (data.status === 'success') {
+                statusDiv.style.display = 'none';
+                new QRCode(qrDiv, { text: data.token, width: 200, height: 200 });
+                iniciarTemporizador();
+            } else { 
+                mostrarError(data.message); // Aquí mostrará "Estás fuera del rango" si falla
+            }
+        } catch(e) { mostrarError('Error de red al validar ubicación.'); }
+    }, () => mostrarError('Es obligatorio activar el GPS para generar el código.'));
+}
 
         function iniciarTemporizador() {
             let tiempoRestante = 60;
